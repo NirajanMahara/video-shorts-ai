@@ -1,13 +1,14 @@
 import { ClerkProvider } from '@clerk/nextjs'
-import { Inter } from 'next/font/google'
 import './globals.css'
-import Navbar from '@/components/Navbar'
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import Navigation from '@/components/Navigation'
 
 const inter = Inter({ subsets: ['latin'] })
 
-export const metadata = {
-  title: 'Video Short - AI Video Processing',
-  description: 'Transform long videos into engaging short-form content',
+export const metadata: Metadata = {
+  title: 'VideoShort - Transform Videos into Engaging Shorts',
+  description: 'Transform your long-form videos into engaging short-form content optimized for social media.',
 }
 
 export default function RootLayout({
@@ -19,8 +20,8 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body className={inter.className}>
-          <Navbar />
-          <main className="min-h-screen bg-gray-100">
+          <Navigation />
+          <main className="min-h-screen bg-gray-50">
             {children}
           </main>
         </body>

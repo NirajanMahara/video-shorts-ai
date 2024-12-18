@@ -12,13 +12,16 @@ export async function GET(request: Request) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    const { searchParams } = new URL(request.url)
-    const videoId = searchParams.get('videoId')
-
     const shorts = await prisma.videoShort.findMany({
       where: {
         userId,
-        ...(videoId ? { videoId } : {})
+      },
+      include: {
+        video: {
+          select: {
+            title: true,
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
