@@ -6,7 +6,8 @@ export default withClerkMiddleware((req: NextRequest) => {
   const { userId } = getAuth(req);
   const isPublicPath = req.nextUrl.pathname === "/sign-in" || 
                       req.nextUrl.pathname === "/sign-up" ||
-                      req.nextUrl.pathname === "/";
+                      req.nextUrl.pathname === "/" ||
+                      req.nextUrl.pathname === "/api/test-s3";
 
   if (!userId && !isPublicPath) {
     const signInUrl = new URL("/sign-in", req.url);
@@ -21,7 +22,7 @@ export default withClerkMiddleware((req: NextRequest) => {
   return NextResponse.next();
 });
 
-// Stop Middleware running on static files
+// Stop Middleware running on static files and api routes
 export const config = {
   matcher: [
     /*

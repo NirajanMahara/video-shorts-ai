@@ -5,6 +5,14 @@ import { auth } from '@clerk/nextjs'
 import { redirect } from 'next/navigation'
 import { Video, Clock, CheckCircle, XCircle } from 'lucide-react'
 
+interface VideoShort {
+  id: string
+  title: string
+  url: string
+  thumbnailUrl: string | null
+  durationInSeconds: number
+}
+
 interface VideoType {
   id: string
   title: string
@@ -12,6 +20,7 @@ interface VideoType {
   url: string | null
   createdAt: string
   updatedAt: string
+  shorts: VideoShort[]
 }
 
 export default function DashboardPage() {
@@ -125,16 +134,22 @@ export default function DashboardPage() {
                   </time>
                 </div>
               </div>
-              {video.status === 'COMPLETED' && video.url && (
-                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
-                  <a
-                    href={video.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-indigo-600 hover:text-indigo-500 font-medium"
-                  >
-                    View Video →
-                  </a>
+              {video.status === 'COMPLETED' && video.shorts.length > 0 && (
+                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 space-y-2">
+                  <p className="text-sm font-medium text-gray-900 mb-2">Generated Shorts:</p>
+                  {video.shorts.map((short, index) => (
+                    <div key={short.id} className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">Part {index + 1}</span>
+                      <a
+                        href={short.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-indigo-600 hover:text-indigo-500 font-medium"
+                      >
+                        View Short →
+                      </a>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

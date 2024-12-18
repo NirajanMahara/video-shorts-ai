@@ -6,12 +6,13 @@ import { Upload, Loader2, Video, X } from 'lucide-react'
 
 interface UploadResponse {
   success: boolean
-  video: {
+  video?: {
     id: string
     title: string
     url: string
     status: string
   }
+  error?: string
 }
 
 export default function VideoUpload() {
@@ -19,11 +20,26 @@ export default function VideoUpload() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number>(0)
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
     if (!file) return
+
+    // Validate file size (50MB limit)
+    if (file.size > 50 * 1024 * 1024) {
+      setError('File size exceeds 50MB limit')
+      return
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('video/')) {
+      setError('Please upload a valid video file')
+      return
+    }
+
     setSelectedFile(file)
+    setError(null)
   }, [])
 
   const handleUpload = async () => {
@@ -33,6 +49,13 @@ export default function VideoUpload() {
       setUploading(true)
       setError(null)
       setSuccess(false)
+      setUploadProgress(0)
+
+      console.log('[UPLOAD] Starting upload:', {
+        name: selectedFile.name,
+        type: selectedFile.type,
+        size: selectedFile.size
+      })
 
       const formData = new FormData()
       formData.append('file', selectedFile)
@@ -43,19 +66,39 @@ export default function VideoUpload() {
         body: formData,
       })
 
-      if (!response.ok) {
-        throw new Error('Upload failed')
+      console.log('[UPLOAD] Response status:', response.status)
+      const responseText = await response.text()
+      console.log('[UPLOAD] Response text:', responseText)
+
+      let data: UploadResponse
+      try {
+        data = JSON.parse(responseText)
+      } catch (parseError) {
+        console.error('[UPLOAD] Failed to parse response:', parseError)
+        console.error('[UPLOAD] Raw response:', responseText)
+        throw new Error('Server returned an invalid response format')
+      }
+      
+      if (!response.ok || !data.success) {
+        console.error('[UPLOAD] Upload failed:', data.error)
+        throw new Error(data.error || `Upload failed with status ${response.status}`)
       }
 
-      const data: UploadResponse = await response.json()
-      
-      if (data.success) {
+      if (data.video) {
+        console.log('[UPLOAD] Upload successful:', data.video)
         setSuccess(true)
         setSelectedFile(null)
+        setUploadProgress(100)
+      } else {
+        throw new Error('Upload succeeded but no video data returned')
       }
     } catch (error) {
-      console.error('Upload failed:', error)
-      setError('Failed to upload video. Please try again.')
+      console.error('[UPLOAD] Error:', error)
+      setError(
+        error instanceof Error 
+          ? error.message 
+          : 'Failed to upload video. Please try again.'
+      )
     } finally {
       setUploading(false)
     }
@@ -85,7 +128,7 @@ export default function VideoUpload() {
         {uploading ? (
           <div className="flex flex-col items-center">
             <Loader2 className="h-12 w-12 text-indigo-500 animate-spin mb-4" />
-            <p className="text-sm text-gray-600">Uploading your video...</p>
+            <p className="text-sm text-gray-600">Uploading your video... {uploadProgress}%</p>
           </div>
         ) : selectedFile ? (
           <div className="flex flex-col items-center">
@@ -95,6 +138,7 @@ export default function VideoUpload() {
                 onClick={(e) => {
                   e.stopPropagation()
                   setSelectedFile(null)
+                  setError(null)
                 }}
                 className="absolute -top-2 -right-2 p-1 bg-red-100 rounded-full hover:bg-red-200 transition-colors"
               >
@@ -111,7 +155,7 @@ export default function VideoUpload() {
                 handleUpload()
               }}
               disabled={uploading}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Start Upload
             </button>
@@ -133,15 +177,21 @@ export default function VideoUpload() {
 
       {error && (
         <div className="flex items-center bg-red-50 text-red-500 p-4 rounded-lg text-sm">
-          <X className="h-5 w-5 mr-2" />
-          {error}
+          <X className="h-5 w-5 mr-2 flex-shrink-0" />
+          <div className="flex-1">{error}</div>
+          <button
+            onClick={() => setError(null)}
+            className="ml-2 p-1 hover:bg-red-100 rounded-full transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
       {success && (
         <div className="flex items-center bg-green-50 text-green-600 p-4 rounded-lg text-sm">
           <svg
-            className="h-5 w-5 mr-2"
+            className="h-5 w-5 mr-2 flex-shrink-0"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -153,7 +203,10 @@ export default function VideoUpload() {
               d="M5 13l4 4L19 7"
             />
           </svg>
-          Video uploaded successfully! Processing will begin shortly.
+          <div className="flex-1">
+            Video uploaded successfully! Processing will begin shortly.
+            You can view the progress in your dashboard.
+          </div>
         </div>
       )}
     </div>
