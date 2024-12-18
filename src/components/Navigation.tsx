@@ -2,11 +2,12 @@
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { Video, Film } from 'lucide-react'
+import { Video, Film, BarChart2 } from 'lucide-react'
 
 const navigation = [
   { name: 'Videos', href: '/dashboard', icon: Video },
   { name: 'Shorts', href: '/shorts', icon: Film },
+  { name: 'Analytics', href: '/analytics', icon: BarChart2 },
 ]
 
 export default function Navigation() {
