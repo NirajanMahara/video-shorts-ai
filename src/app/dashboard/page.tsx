@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 import { auth } from '@clerk/nextjs'
 import { redirect } from 'next/navigation'
-import { Video, Clock, CheckCircle, XCircle, Play } from 'lucide-react'
+import { Video, Clock, CheckCircle, XCircle, Play, Trash2 } from 'lucide-react'
 import Image from 'next/image'
 import VideoModal from '@/components/VideoModal'
+import ConfirmDialog from '@/components/ConfirmDialog'
 
 interface VideoShort {
   id: string
@@ -35,6 +36,8 @@ export default function DashboardPage() {
   const [videos, setVideos] = useState<VideoType[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedShort, setSelectedShort] = useState<VideoShort | null>(null)
+  const [videoToDelete, setVideoToDelete] = useState<VideoType | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const fetchVideos = async () => {
     try {
@@ -60,6 +63,25 @@ export default function DashboardPage() {
 
     return () => clearInterval(interval)
   }, [videos])
+
+  const handleDeleteVideo = async (video: VideoType) => {
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`/api/videos/${video.id}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) throw new Error('Failed to delete video')
+      
+      // Remove the video from the local state
+      setVideos(videos.filter(v => v.id !== video.id))
+    } catch (error) {
+      console.error('Error deleting video:', error)
+      // You could add error toast here
+    } finally {
+      setIsDeleting(false)
+      setVideoToDelete(null)
+    }
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -120,7 +142,17 @@ export default function DashboardPage() {
                     <h3 className="font-medium text-gray-900 line-clamp-1" title={video.title}>
                       {video.title}
                     </h3>
-                    {getStatusIcon(video.status)}
+                    <div className="flex items-center space-x-2">
+                      {getStatusIcon(video.status)}
+                      <button
+                        onClick={() => setVideoToDelete(video)}
+                        disabled={isDeleting}
+                        className="text-gray-400 hover:text-red-500 transition-colors"
+                        title="Delete video"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span
@@ -193,6 +225,16 @@ export default function DashboardPage() {
         onClose={() => setSelectedShort(null)}
         videoUrl={selectedShort?.url || ''}
         title={selectedShort?.title || ''}
+      />
+
+      <ConfirmDialog
+        isOpen={!!videoToDelete}
+        onClose={() => setVideoToDelete(null)}
+        onConfirm={() => videoToDelete && handleDeleteVideo(videoToDelete)}
+        title="Delete Video"
+        message={`Are you sure you want to delete "${videoToDelete?.title}"? This will also delete all generated shorts and cannot be undone.`}
+        confirmText={isDeleting ? 'Deleting...' : 'Delete'}
+        cancelText="Cancel"
       />
     </>
   )

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 // Initialize S3 client with explicit configuration
@@ -101,4 +101,29 @@ export async function getPublicUrl(key: string): Promise<string> {
   validateS3Config()
   // Return a pre-signed URL instead of a direct S3 URL
   return getSignedDownloadUrl(key, 604800) // 7 days expiry
+}
+
+export async function deleteFromS3(url: string): Promise<void> {
+  try {
+    // Extract the key from the URL
+    const urlObj = new URL(url)
+    const key = urlObj.pathname.slice(1) // Remove leading slash
+
+    console.log('[S3] Deleting file:', {
+      bucket: BUCKET_NAME,
+      key,
+    })
+
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+      })
+    )
+
+    console.log('[S3] Delete successful')
+  } catch (error) {
+    console.error('[S3_ERROR] Delete failed:', error)
+    throw error
+  }
 } 
