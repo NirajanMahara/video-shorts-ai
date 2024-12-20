@@ -7,6 +7,17 @@ import { processVideo } from '@/lib/videoProcessor'
 
 const prisma = new PrismaClient()
 
+// Schema for processing settings validation
+const ProcessingSettingsSchema = z.object({
+  segmentDuration: z.number().min(5).max(60),
+  enableSceneDetection: z.boolean(),
+  enableCaptions: z.boolean(),
+  enableFilters: z.boolean(),
+  selectedFilter: z.string(),
+  minSegmentLength: z.number().min(5).max(30),
+  maxSegments: z.number().min(1).max(10)
+})
+
 // Schema for upload request validation
 const UploadRequestSchema = z.object({
   title: z.string().min(1),
@@ -17,7 +28,8 @@ const UploadRequestSchema = z.object({
     }
     // Check file type
     return file.type.startsWith('video/')
-  }, 'File must be a video under 50MB')
+  }, 'File must be a video under 50MB'),
+  settings: ProcessingSettingsSchema
 })
 
 export async function POST(request: Request) {
@@ -36,25 +48,38 @@ export async function POST(request: Request) {
     const formData = await request.formData()
     const title = formData.get('title') as string
     const file = formData.get('file') as File
+    const settingsJson = formData.get('settings') as string
+    let settings
 
-    console.log('[UPLOAD_API] Received file:', {
+    try {
+      settings = JSON.parse(settingsJson)
+    } catch (error) {
+      console.error('[UPLOAD_API] Failed to parse settings:', error)
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid processing settings format'
+      }, { status: 400 })
+    }
+
+    console.log('[UPLOAD_API] Received request:', {
       title,
-      type: file?.type,
-      size: file?.size,
+      fileType: file?.type,
+      fileSize: file?.size,
+      settings
     })
 
     // Validate request data
     try {
-      UploadRequestSchema.parse({ title, file })
+      UploadRequestSchema.parse({ title, file, settings })
     } catch (validationError) {
       console.error('[UPLOAD_API] Validation error:', validationError)
       return NextResponse.json({
         success: false,
-        error: 'Invalid file or title. Please ensure you are uploading a video file under 50MB.'
+        error: 'Invalid request data. Please check file and settings.'
       }, { status: 400 })
     }
 
-    console.log('[UPLOAD_API] File validation successful')
+    console.log('[UPLOAD_API] Request validation successful')
 
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer()
@@ -88,19 +113,33 @@ export async function POST(request: Request) {
       }, { status: 500 })
     }
 
-    // Create video record in database
+    // Create video and settings records in database
     let video
     try {
-      console.log('[UPLOAD_API] Creating database record')
+      console.log('[UPLOAD_API] Creating database records')
       video = await prisma.video.create({
         data: {
-          title: title,
+          title,
           userId,
           url: fileUrl,
-          status: 'PENDING'
+          status: 'PENDING',
+          settings: {
+            create: {
+              segmentDuration: settings.segmentDuration,
+              enableSceneDetection: settings.enableSceneDetection,
+              enableCaptions: settings.enableCaptions,
+              enableFilters: settings.enableFilters,
+              selectedFilter: settings.selectedFilter,
+              minSegmentLength: settings.minSegmentLength,
+              maxSegments: settings.maxSegments
+            }
+          }
         },
+        include: {
+          settings: true
+        }
       })
-      console.log('[UPLOAD_API] Database record created:', video)
+      console.log('[UPLOAD_API] Database records created:', video)
     } catch (dbError) {
       console.error('[UPLOAD_API] Database error:', dbError)
       return NextResponse.json({

@@ -65,12 +65,30 @@ export async function DELETE(
       }
     }
 
-    // Delete video and all related shorts from database
-    await prisma.video.delete({
-      where: {
-        id: params.id,
-      },
-    })
+    // First delete all related records
+    await prisma.$transaction([
+      // Delete all captions for shorts
+      prisma.caption.deleteMany({
+        where: {
+          OR: [
+            { videoId: params.id },
+            { shortId: { in: video.shorts.map(s => s.id) } }
+          ]
+        }
+      }),
+      // Delete all shorts
+      prisma.videoShort.deleteMany({
+        where: { videoId: params.id }
+      }),
+      // Delete processing settings
+      prisma.processingSettings.deleteMany({
+        where: { videoId: params.id }
+      }),
+      // Finally delete the video
+      prisma.video.delete({
+        where: { id: params.id }
+      })
+    ])
 
     return NextResponse.json({ success: true })
   } catch (error) {
