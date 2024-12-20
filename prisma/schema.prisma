@@ -20,6 +20,8 @@ model Video {
   thumbnailUrl   String?      // Thumbnail URL
   description String?      // Optional description
   shorts      VideoShort[] // Relation to generated shorts
+  settings    ProcessingSettings? // Processing settings
+  captions    Caption[]    // Video captions
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 }
@@ -35,6 +37,39 @@ model VideoShort {
   startTime   Float    // Start time in original video
   endTime     Float    // End time in original video
   userId      String
+  filter      String?  // Applied video filter
+  captions    Caption[] // Short captions
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model ProcessingSettings {
+  id                  String   @id @default(cuid())
+  videoId             String   @unique
+  video               Video    @relation(fields: [videoId], references: [id])
+  segmentDuration     Int      @default(15)
+  enableSceneDetection Boolean  @default(true)
+  enableCaptions      Boolean  @default(false)
+  enableFilters       Boolean  @default(false)
+  selectedFilter      String   @default("none")
+  minSegmentLength    Int      @default(10)
+  maxSegments         Int      @default(5)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Caption {
+  id          String   @id @default(cuid())
+  text        String
+  startTime   Float
+  endTime     Float
+  videoId     String?
+  video       Video?   @relation(fields: [videoId], references: [id])
+  shortId     String?
+  short       VideoShort? @relation(fields: [shortId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([videoId])
+  @@index([shortId])
 } 
