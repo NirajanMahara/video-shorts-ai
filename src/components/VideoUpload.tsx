@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Upload, Loader2, Video, X } from 'lucide-react'
+import ProcessingSettings, { ProcessingSettings as Settings } from './ProcessingSettings'
 
 interface UploadResponse {
   success: boolean
@@ -21,6 +22,15 @@ export default function VideoUpload() {
   const [success, setSuccess] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number>(0)
+  const [processingSettings, setProcessingSettings] = useState<Settings>({
+    segmentDuration: 15,
+    enableSceneDetection: true,
+    enableCaptions: false,
+    enableFilters: false,
+    selectedFilter: 'none',
+    minSegmentLength: 10,
+    maxSegments: 5,
+  })
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
@@ -54,12 +64,14 @@ export default function VideoUpload() {
       console.log('[UPLOAD] Starting upload:', {
         name: selectedFile.name,
         type: selectedFile.type,
-        size: selectedFile.size
+        size: selectedFile.size,
+        settings: processingSettings,
       })
 
       const formData = new FormData()
       formData.append('file', selectedFile)
       formData.append('title', selectedFile.name)
+      formData.append('settings', JSON.stringify(processingSettings))
 
       const response = await fetch('/api/upload', {
         method: 'POST',
@@ -149,16 +161,6 @@ export default function VideoUpload() {
             <p className="text-xs text-gray-500 mb-4">
               {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
             </p>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                handleUpload()
-              }}
-              disabled={uploading}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Start Upload
-            </button>
           </div>
         ) : (
           <div className="flex flex-col items-center">
@@ -174,6 +176,23 @@ export default function VideoUpload() {
           </div>
         )}
       </div>
+
+      {selectedFile && (
+        <div className="space-y-4">
+          <ProcessingSettings
+            onSettingsChange={setProcessingSettings}
+            defaultSettings={processingSettings}
+          />
+          
+          <button
+            onClick={handleUpload}
+            disabled={uploading}
+            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {uploading ? 'Uploading...' : 'Start Upload'}
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="flex items-center bg-red-50 text-red-500 p-4 rounded-lg text-sm">
