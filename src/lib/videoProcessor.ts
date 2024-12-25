@@ -1,21 +1,13 @@
 import ffmpeg from 'fluent-ffmpeg'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, ProcessingSettings as PrismaProcessingSettings, Prisma } from '@prisma/client'
 import { uploadToS3, generateS3Key } from './storage'
-import { generateThumbnail, generateThumbnailAtIntervals } from './thumbnailGenerator'
-import { readFile, writeFile } from 'fs/promises'
+import { generateThumbnail } from './thumbnailGenerator'
+import { readFile, writeFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import os from 'os'
 import { detectScenes } from './sceneDetection'
-import { generateCaptions } from './captionGenerator'
 
-interface ProcessingSettings {
-  segmentDuration: number
-  enableSceneDetection: boolean
-  enableCaptions: boolean
-  enableFilters: boolean
-  selectedFilter: string
-  minSegmentLength: number
-  maxSegments: number
+interface ProcessingSettings extends Omit<PrismaProcessingSettings, 'id' | 'videoId' | 'createdAt' | 'updatedAt'> {
   maxDuration?: number
 }
 
@@ -24,9 +16,6 @@ interface VideoSegment {
   duration: number
   score: number
 }
-
-// Use system FFmpeg instead of the installer package
-console.log('[FFMPEG] Using system FFmpeg')
 
 const prisma = new PrismaClient()
 
@@ -67,8 +56,6 @@ async function getVideoMetadata(path: string): Promise<{ duration: number }> {
         return
       }
       
-      console.log('[METADATA] Raw metadata:', JSON.stringify(metadata, null, 2))
-      
       if (!metadata?.format?.duration) {
         console.error('[METADATA_ERROR] Invalid metadata:', metadata)
         reject(new Error('Invalid video metadata: duration not found'))
@@ -80,48 +67,6 @@ async function getVideoMetadata(path: string): Promise<{ duration: number }> {
         duration: metadata.format.duration,
       })
     })
-  })
-}
-
-async function extractSegment(
-  inputPath: string,
-  outputPath: string,
-  start: number,
-  duration: number
-): Promise<void> {
-  console.log(`[EXTRACT] Extracting segment: start=${start}, duration=${duration}`)
-  console.log(`[EXTRACT] Input path: ${inputPath}`)
-  console.log(`[EXTRACT] Output path: ${outputPath}`)
-  
-  return new Promise((resolve, reject) => {
-    ffmpeg(inputPath)
-      .setStartTime(start)
-      .setDuration(duration)
-      .output(outputPath)
-      .outputOptions([
-        '-c:v libx264',
-        '-c:a aac',
-        '-b:v 2M',
-        '-b:a 128k',
-        '-movflags +faststart',
-        '-y'
-      ])
-      .on('start', (command) => {
-        console.log('[FFMPEG] Started command:', command)
-      })
-      .on('progress', (progress) => {
-        console.log('[FFMPEG] Processing:', progress.percent, '% done')
-      })
-      .on('end', () => {
-        console.log('[FFMPEG] Segment extraction complete')
-        resolve()
-      })
-      .on('error', (err) => {
-        console.error('[FFMPEG_ERROR]', err)
-        console.error('[FFMPEG_ERROR] Command:', err.message)
-        reject(new Error(`FFmpeg error: ${err.message}`))
-      })
-      .run()
   })
 }
 
@@ -138,7 +83,7 @@ async function analyzeVideo(path: string, settings: ProcessingSettings): Promise
       if (sceneTimestamps.length > 0) {
         // Convert scene changes to segments
         segments = sceneTimestamps.map((startTime, index, array) => {
-          const endTime = array[index + 1] || settings.maxDuration
+          const endTime = array[index + 1] ?? settings.maxDuration ?? startTime + settings.segmentDuration
           return {
             start: startTime,
             duration: endTime - startTime,
@@ -214,7 +159,7 @@ async function processSegment(
     ])
 
   // Apply video filter if enabled
-  if (settings.enableFilters && settings.selectedFilter !== 'none') {
+  if (settings.enableFilters && settings.selectedFilter && settings.selectedFilter !== 'none') {
     const filterOptions = getFilterOptions(settings.selectedFilter)
     ffmpegCommand.videoFilters(filterOptions)
   }
@@ -248,7 +193,7 @@ function getFilterOptions(filter: string): string[] {
     case 'grayscale':
       return ['colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3']
     case 'blur':
-      return ['split[a][b]', '[a]scale=ih*16/9:-1,boxblur=luma_radius=min(h\\,w)/20:luma_power=1[bg]', '[b]scale=-1:h[fg]', '[bg][fg]overlay=(W-w)/2:(H-h)/2']
+      return ['boxblur=2:1']
     default:
       return []
   }
@@ -256,6 +201,9 @@ function getFilterOptions(filter: string): string[] {
 
 export async function processVideo(videoId: string) {
   console.log('[PROCESS] Starting video processing for:', videoId)
+  let inputPath: string | null = null
+  let successfulSegments = 0
+
   try {
     // Get video and settings
     const video = await prisma.video.findUnique({
@@ -267,82 +215,111 @@ export async function processVideo(videoId: string) {
       throw new Error('Video not found or URL missing')
     }
 
-    const settings = video.settings || await prisma.processingSettings.create({
-      data: {
-        videoId,
-        segmentDuration: 15,
-        enableSceneDetection: true,
-        enableCaptions: false,
-        enableFilters: false,
-        selectedFilter: 'none',
-        minSegmentLength: 10,
-        maxSegments: 5
-      }
+    // Update status to processing
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { status: 'PROCESSING' }
     })
 
-    // Download and process video
-    const inputPath = await downloadVideo(video.url)
-    const { duration } = await getVideoMetadata(inputPath)
+    // Download video
+    inputPath = await downloadVideo(video.url)
+    console.log('[PROCESS] Video downloaded to:', inputPath)
 
-    // Skip caption generation temporarily
-    console.log('[PROCESS] Caption generation is temporarily disabled')
+    // Get video metadata
+    const metadata = await getVideoMetadata(inputPath)
+    console.log('[PROCESS] Video metadata:', metadata)
+
+    // Process video segments
+    const settings: ProcessingSettings = {
+      segmentDuration: video.settings?.segmentDuration ?? 15,
+      enableSceneDetection: video.settings?.enableSceneDetection ?? true,
+      enableCaptions: video.settings?.enableCaptions ?? false,
+      enableFilters: video.settings?.enableFilters ?? false,
+      selectedFilter: video.settings?.selectedFilter ?? 'none',
+      minSegmentLength: video.settings?.minSegmentLength ?? 10,
+      maxSegments: video.settings?.maxSegments ?? 5,
+      selectedSegments: video.settings?.selectedSegments ?? '',
+      maxDuration: metadata.duration
+    }
 
     // Analyze video and get segments
-    const segments = await analyzeVideo(inputPath, {
-      ...settings,
-      maxDuration: duration
-    })
+    const segments = await analyzeVideo(inputPath, settings)
+    console.log('[PROCESS] Video analysis complete, segments:', segments)
 
     // Process each segment
-    let successfulSegments = 0
-    for (const [index, segment] of segments.entries()) {
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i]
       try {
-        const outputPath = join(os.tmpdir(), `segment-${Date.now()}.mp4`)
+        const outputPath = join(os.tmpdir(), `segment-${i}-${Date.now()}.mp4`)
+        
+        // Extract and process segment
         await processSegment(inputPath, outputPath, segment, settings)
+        console.log(`[PROCESS] Segment ${i + 1} processed:`, outputPath)
 
         // Generate thumbnail
         const thumbnail = await generateThumbnail(outputPath, video.userId)
+        console.log(`[PROCESS] Thumbnail generated for segment ${i + 1}:`, thumbnail)
 
         // Upload to S3
-        const key = generateS3Key(video.userId, `short-${Date.now()}.mp4`)
         const buffer = await readFile(outputPath)
-        const url = await uploadToS3(buffer, key)
+        const key = generateS3Key(video.userId, `short-${Date.now()}.mp4`)
+        const url = await uploadToS3(buffer, key, 'video/mp4')
+        console.log(`[PROCESS] Segment ${i + 1} uploaded to S3:`, url)
 
-        // Create VideoShort record
-        await prisma.videoShort.create({
-          data: {
-            videoId: video.id,
-            title: `${video.title} - Part ${index + 1}`,
-            url,
-            durationInSeconds: segment.duration,
-            thumbnailUrl: thumbnail,
-            startTime: segment.start,
-            endTime: segment.start + segment.duration,
-            userId: video.userId,
-            filter: settings.enableFilters ? settings.selectedFilter : null
-          }
-        })
+        // Create VideoShort record with title
+        const shortData = {
+          videoId: video.id,
+          title: `${video.title} - Part ${i + 1}`,
+          url,
+          durationInSeconds: segment.duration,
+          thumbnailUrl: thumbnail || undefined,
+          startTime: segment.start,
+          endTime: segment.start + segment.duration,
+          userId: video.userId,
+          filter: settings.enableFilters && settings.selectedFilter !== 'none' ? settings.selectedFilter : null
+        }
+
+        await prisma.videoShort.create({ data: shortData })
+        console.log(`[PROCESS] Database record created for segment ${i + 1}`)
 
         successfulSegments++
+
+        // Clean up temporary output file
+        await unlink(outputPath)
       } catch (error) {
-        console.error(`[SEGMENT_ERROR] Failed to process segment ${index + 1}:`, error)
+        console.error(`[SEGMENT_ERROR] Failed to process segment ${i + 1}:`, error)
       }
     }
 
-    // Update video status
+    // Update final status
     const finalStatus = successfulSegments > 0 ? 'COMPLETED' : 'FAILED'
+    const videoData = {
+      status: finalStatus,
+      durationInSeconds: metadata.duration
+    }
+
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: finalStatus }
+      data: videoData
     })
 
-    return { success: finalStatus === 'COMPLETED' }
+    return { success: finalStatus === 'COMPLETED', segments: successfulSegments }
   } catch (error) {
     console.error('[PROCESS_ERROR] Video processing failed:', error)
     await prisma.video.update({
       where: { id: videoId },
       data: { status: 'FAILED' }
     })
-    return { success: false, error }
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  } finally {
+    // Clean up temporary files
+    if (inputPath) {
+      try {
+        await unlink(inputPath)
+        console.log('[CLEANUP] Removed temporary input file:', inputPath)
+      } catch (cleanupError) {
+        console.error('[CLEANUP_ERROR] Failed to remove temporary file:', cleanupError)
+      }
+    }
   }
 } 

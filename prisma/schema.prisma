@@ -54,6 +54,7 @@ model ProcessingSettings {
   selectedFilter      String   @default("none")
   minSegmentLength    Int      @default(10)
   maxSegments         Int      @default(5)
+  selectedSegments    String   @default("")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

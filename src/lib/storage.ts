@@ -97,18 +97,23 @@ export function generateS3Key(userId: string, filename: string): string {
   return `uploads/${userId}/${timestamp}-${sanitizedFilename}`
 }
 
-export async function getPublicUrl(key: string): Promise<string> {
-  validateS3Config()
-  // Return a pre-signed URL instead of a direct S3 URL
-  return getSignedDownloadUrl(key, 604800) // 7 days expiry
+export function extractKeyFromUrl(url: string): string {
+  try {
+    const urlObj = new URL(url)
+    // The key is everything after the bucket name in the path
+    const parts = urlObj.pathname.split('/')
+    // Remove empty strings and the bucket name if present
+    const keyParts = parts.filter(part => part && part !== BUCKET_NAME)
+    return keyParts.join('/')
+  } catch (error) {
+    console.error('[S3_ERROR] Failed to extract key from URL:', error)
+    throw new Error('Invalid S3 URL format')
+  }
 }
 
 export async function deleteFromS3(url: string): Promise<void> {
   try {
-    // Extract the key from the URL
-    const urlObj = new URL(url)
-    const key = urlObj.pathname.slice(1) // Remove leading slash
-
+    const key = extractKeyFromUrl(url)
     console.log('[S3] Deleting file:', {
       bucket: BUCKET_NAME,
       key,
