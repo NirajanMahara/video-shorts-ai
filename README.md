@@ -1,90 +1,126 @@
-# Video Short - AI Video Processing
+# Video Short Generator
 
-Transform long-form videos into engaging short-form content optimized for social media platforms.
+A Next.js application that automatically generates short-form videos from longer content. The application uses AI-powered scene detection and smart segmentation to create engaging short clips.
 
 ## Features
 
-- Upload and process long videos
-- AI-powered scene detection and highlight extraction
-- Automatic caption generation
-- Export to various social media formats
-- User authentication and video management
+- 🎥 Automatic video processing and segmentation
+- 🎬 Smart scene detection
+- 📝 Automatic caption generation
+- 🎨 Video filters and effects
+- 🔐 User authentication with Clerk
+- ☁️ AWS S3 storage integration
+- 📊 Analytics dashboard
+- 🎯 Segment selection and preview
+
+## Documentation
+
+### Video Tutorial: Upload and Analyze Video Processing
+Watch this video tutorial to learn how to use the video processing features:
+
+<iframe src="https://scribehow.com/embed/Upload_and_Analyze_Video_Processing_in_Dashboard__N-6W_1C8RU-yzjt-pItM1g?as=video" width="100%" height="640" allowfullscreen frameborder="0"></iframe>
+
+You can also view this tutorial on [Scribehow](https://scribehow.com/shared/Upload_and_Analyze_Video_Processing_in_Dashboard__N-6W_1C8RU-yzjt-pItM1g).
 
 ## Tech Stack
 
-- Next.js 14 with App Router
-- TypeScript
-- Tailwind CSS
-- Prisma (PostgreSQL)
-- Clerk Authentication
-- FFmpeg for video processing
-- Cloud Storage (AWS S3 or similar)
+- **Frontend**: Next.js 14, React 18, TailwindCSS
+- **Backend**: Next.js API Routes
+- **Database**: PostgreSQL with Prisma ORM
+- **Authentication**: Clerk
+- **Storage**: AWS S3
+- **Video Processing**: FFmpeg
+- **Transcription**: Whisper
+- **Styling**: Tailwind CSS, Radix UI
 
-## Getting Started
+## Prerequisites
 
-1. Clone the repository:
-\`\`\`bash
-git clone https://github.com/yourusername/video-short.git
-cd video-short
-\`\`\`
+- Node.js 18 or higher
+- PostgreSQL database
+- FFmpeg installed on your system
+- AWS S3 bucket and credentials
+- Clerk account for authentication
 
-2. Install dependencies:
-\`\`\`bash
-npm install
-\`\`\`
+## Environment Setup
 
-3. Set up environment variables:
-   - Copy `.env.example` to `.env`
-   - Fill in the required environment variables
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
 
-4. Set up the database:
-\`\`\`bash
-npx prisma generate
-npx prisma db push
-\`\`\`
+2. Fill in the environment variables:
+   ```env
+   # Database
+   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/video_short"
 
-5. Run the development server:
-\`\`\`bash
-npm run dev
-\`\`\`
+   # Clerk Auth
+   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_publishable_key
+   CLERK_SECRET_KEY=your_secret_key
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+   # S3 Storage
+   STORAGE_REGION=us-east-1
+   STORAGE_ACCESS_KEY=your_access_key
+   STORAGE_SECRET_KEY=your_secret_key
+   STORAGE_BUCKET=your_bucket_name
+   ```
 
-## Environment Variables
+## Installation
 
-Create a `.env` file in the root directory with the following variables:
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-\`\`\`env
-# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/video_short?schema=public"
+2. Set up the database:
+   ```bash
+   npx prisma generate
+   npx prisma db push
+   ```
 
-# Authentication (Clerk)
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
-CLERK_SECRET_KEY=your_clerk_secret_key
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
-# Storage
-STORAGE_ACCESS_KEY=your_storage_access_key
-STORAGE_SECRET_KEY=your_storage_secret_key
-STORAGE_BUCKET=your_storage_bucket
-STORAGE_REGION=your_storage_region
-\`\`\`
+## Development Workflow
 
-## Development
+1. Create a new feature branch from development:
+   ```bash
+   git checkout development
+   git checkout -b feature/your-feature-name
+   ```
 
-- The application uses Next.js 14 with the App Router
-- Authentication is handled by Clerk
-- Database operations are managed through Prisma
-- Video processing is done using FFmpeg
-- File uploads are handled through cloud storage
+2. Make your changes and commit them:
+   ```bash
+   git add .
+   git commit -m "feat: your feature description"
+   ```
+
+3. Push your changes and create a pull request to the development branch:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+4. After review and approval, merge to development branch
+5. When ready for production, create a pull request from development to main
+
+## Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build production bundle
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
+- `npm run lint:fix` - Fix ESLint errors
+- `npm run type-check` - Run TypeScript type checking
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (\`git checkout -b feature/amazing-feature\`)
-3. Commit your changes (\`git commit -m 'Add some amazing feature'\`)
-4. Push to the branch (\`git push origin feature/amazing-feature\`)
-5. Open a Pull Request
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
