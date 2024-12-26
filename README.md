@@ -13,6 +13,15 @@ A Next.js application that automatically generates short-form videos from longer
 - 📊 Analytics dashboard
 - 🎯 Segment selection and preview
 
+## Documentation
+
+### Video Tutorial: Upload and Analyze Video Processing
+Watch this video tutorial to learn how to use the video processing features:
+
+<iframe src="https://scribehow.com/embed/Upload_and_Analyze_Video_Processing_in_Dashboard__N-6W_1C8RU-yzjt-pItM1g?as=video" width="100%" height="640" allowfullscreen frameborder="0"></iframe>
+
+You can also view this tutorial on [Scribehow](https://scribehow.com/shared/Upload_and_Analyze_Video_Processing_in_Dashboard__N-6W_1C8RU-yzjt-pItM1g).
+
 ## Tech Stack
 
 - **Frontend**: Next.js 14, React 18, TailwindCSS
