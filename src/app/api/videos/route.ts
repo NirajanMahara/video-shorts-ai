@@ -1,13 +1,10 @@
 import { auth } from '@clerk/nextjs'
 import { NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import prisma from '@/lib/prisma'
 
 export async function GET() {
   try {
     const { userId } = auth()
-    
     if (!userId) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
@@ -16,17 +13,14 @@ export async function GET() {
       where: {
         userId,
       },
-      include: {
-        shorts: true,
-      },
       orderBy: {
         createdAt: 'desc',
       },
     })
 
-    return NextResponse.json({ success: true, videos })
+    return NextResponse.json(videos)
   } catch (error) {
-    console.error('[VIDEOS_ERROR]', error)
+    console.error('Error fetching videos:', error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
 } 

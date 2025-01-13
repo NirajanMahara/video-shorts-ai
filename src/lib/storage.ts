@@ -3,22 +3,22 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 // Initialize S3 client with explicit configuration
 const s3Client = new S3Client({
-  region: process.env.STORAGE_REGION!,
+  region: process.env.AWS_REGION!,
   credentials: {
-    accessKeyId: process.env.STORAGE_ACCESS_KEY!,
-    secretAccessKey: process.env.STORAGE_SECRET_KEY!,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
   },
 })
 
-const BUCKET_NAME = process.env.STORAGE_BUCKET!
+const BUCKET_NAME = process.env.AWS_BUCKET_NAME!
 
 // Validate S3 configuration
 function validateS3Config() {
   const requiredEnvVars = {
-    STORAGE_REGION: process.env.STORAGE_REGION,
-    STORAGE_ACCESS_KEY: process.env.STORAGE_ACCESS_KEY,
-    STORAGE_SECRET_KEY: process.env.STORAGE_SECRET_KEY,
-    STORAGE_BUCKET: process.env.STORAGE_BUCKET,
+    AWS_REGION: process.env.AWS_REGION,
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+    AWS_BUCKET_NAME: process.env.AWS_BUCKET_NAME,
   }
 
   const missingVars = Object.entries(requiredEnvVars)
@@ -56,13 +56,8 @@ export async function uploadToS3(
 
     await s3Client.send(command)
     
-    // Get a pre-signed URL for immediate access
-    const getCommand = new GetObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-    })
-    
-    const url = await getSignedUrl(s3Client, getCommand, { expiresIn: 604800 }) // 7 days
+    // Return the direct S3 URL
+    const url = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`
     console.log('[S3] Upload successful:', url)
     
     return url

@@ -6,13 +6,9 @@ import { Upload, Loader2, Video, X } from 'lucide-react'
 import ProcessingSettings, { ProcessingSettings as Settings } from './ProcessingSettings'
 
 interface UploadResponse {
-  success: boolean
-  video?: {
-    id: string
-    title: string
-    url: string
-    status: string
-  }
+  status: string
+  video_id: string
+  message: string
   error?: string
 }
 
@@ -25,11 +21,16 @@ export default function VideoUpload() {
   const [processingSettings, setProcessingSettings] = useState<Settings>({
     segmentDuration: 15,
     enableSceneDetection: true,
+    enableFaceDetection: true,
+    enableAudioAnalysis: true,
     enableCaptions: false,
     enableFilters: false,
+    enableDynamicEffects: true,
     selectedFilter: 'none',
     minSegmentLength: 10,
     maxSegments: 5,
+    captionStyle: 'standard',
+    transitionStyle: 'fade'
   })
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -68,49 +69,65 @@ export default function VideoUpload() {
         settings: processingSettings,
       })
 
+      // Upload to Python backend
       const formData = new FormData()
       formData.append('file', selectedFile)
       formData.append('title', selectedFile.name)
-      formData.append('settings', JSON.stringify(processingSettings))
+      
+      // Append each setting individually
+      Object.entries(processingSettings).forEach(([key, value]) => {
+        // Convert boolean values to strings
+        const stringValue = typeof value === 'boolean' ? value.toString() : value.toString()
+        formData.append(key, stringValue)
+      })
 
-      const response = await fetch('/api/upload', {
+      const response = await fetch('http://localhost:8000/process', {
         method: 'POST',
         body: formData,
       })
 
       console.log('[UPLOAD] Response status:', response.status)
-      const responseText = await response.text()
-      console.log('[UPLOAD] Response text:', responseText)
-
-      let data: UploadResponse
-      try {
-        data = JSON.parse(responseText)
-      } catch (parseError) {
-        console.error('[UPLOAD] Failed to parse response:', parseError)
-        console.error('[UPLOAD] Raw response:', responseText)
-        throw new Error('Server returned an invalid response format')
-      }
+      const data: UploadResponse = await response.json()
+      console.log('[UPLOAD] Response data:', data)
       
-      if (!response.ok || !data.success) {
+      if (!response.ok) {
         console.error('[UPLOAD] Upload failed:', data.error)
         throw new Error(data.error || `Upload failed with status ${response.status}`)
       }
 
-      if (data.video) {
-        console.log('[UPLOAD] Upload successful:', data.video)
+      if (data.video_id) {
+        console.log('[UPLOAD] Upload successful:', data.video_id)
         setSuccess(true)
         setSelectedFile(null)
         setUploadProgress(100)
+        
+        // Start polling for status
+        const interval = setInterval(async () => {
+          try {
+            const statusResponse = await fetch(`http://localhost:8000/status/${data.video_id}`)
+            const statusData = await statusResponse.json()
+            
+            if (statusData.status === 'COMPLETED') {
+              clearInterval(interval)
+              // Handle completion - maybe show the processed videos
+              console.log('[UPLOAD] Processing completed:', statusData)
+            } else if (statusData.status === 'FAILED') {
+              clearInterval(interval)
+              setError('Processing failed: ' + (statusData.metadata?.error || 'Unknown error'))
+            }
+            // Continue polling if status is 'PROCESSING'
+          } catch (error) {
+            console.error('[UPLOAD] Status check failed:', error)
+            clearInterval(interval)
+            setError('Failed to check processing status')
+          }
+        }, 2000) // Poll every 2 seconds
       } else {
-        throw new Error('Upload succeeded but no video data returned')
+        throw new Error('Upload succeeded but no video ID returned')
       }
     } catch (error) {
       console.error('[UPLOAD] Error:', error)
-      setError(
-        error instanceof Error 
-          ? error.message 
-          : 'Failed to upload video. Please try again.'
-      )
+      setError(error instanceof Error ? error.message : 'Upload failed')
     } finally {
       setUploading(false)
     }

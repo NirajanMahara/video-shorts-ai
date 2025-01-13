@@ -1,11 +1,12 @@
 import ffmpeg from 'fluent-ffmpeg'
-import { PrismaClient, ProcessingSettings as PrismaProcessingSettings, Prisma } from '@prisma/client'
+import { ProcessingSettings as PrismaProcessingSettings } from '@prisma/client'
 import { uploadToS3, generateS3Key } from './storage'
 import { generateThumbnail } from './thumbnailGenerator'
 import { readFile, writeFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import os from 'os'
 import { detectScenes } from './sceneDetection'
+import prisma from './prisma'
 
 interface ProcessingSettings extends Omit<PrismaProcessingSettings, 'id' | 'videoId' | 'createdAt' | 'updatedAt'> {
   maxDuration?: number
@@ -16,8 +17,6 @@ interface VideoSegment {
   duration: number
   score: number
 }
-
-const prisma = new PrismaClient()
 
 async function downloadVideo(url: string): Promise<string> {
   console.log('[DOWNLOAD] Starting video download from:', url)
@@ -249,76 +248,79 @@ export async function processVideo(videoId: string) {
     // Process each segment
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i]
+      const outputPath = join(os.tmpdir(), `segment-${i}-${Date.now()}.mp4`)
+
       try {
-        const outputPath = join(os.tmpdir(), `segment-${i}-${Date.now()}.mp4`)
-        
-        // Extract and process segment
+        // Process segment
         await processSegment(inputPath, outputPath, segment, settings)
-        console.log(`[PROCESS] Segment ${i + 1} processed:`, outputPath)
+        console.log(`[PROCESS] Segment ${i + 1}/${segments.length} processed`)
 
-        // Generate thumbnail
-        const thumbnail = await generateThumbnail(outputPath, video.userId)
-        console.log(`[PROCESS] Thumbnail generated for segment ${i + 1}:`, thumbnail)
+        // Upload segment
+        const key = generateS3Key(video.userId, `segment-${i}.mp4`)
+        const url = await uploadToS3(await readFile(outputPath), key, 'video/mp4')
+        console.log(`[PROCESS] Segment ${i + 1} uploaded:`, url)
 
-        // Upload to S3
-        const buffer = await readFile(outputPath)
-        const key = generateS3Key(video.userId, `short-${Date.now()}.mp4`)
-        const url = await uploadToS3(buffer, key, 'video/mp4')
-        console.log(`[PROCESS] Segment ${i + 1} uploaded to S3:`, url)
-
-        // Create VideoShort record with title
-        const shortData = {
-          videoId: video.id,
-          title: `${video.title} - Part ${i + 1}`,
-          url,
-          durationInSeconds: segment.duration,
-          thumbnailUrl: thumbnail || undefined,
-          startTime: segment.start,
-          endTime: segment.start + segment.duration,
-          userId: video.userId,
-          filter: settings.enableFilters && settings.selectedFilter !== 'none' ? settings.selectedFilter : null
-        }
-
-        await prisma.videoShort.create({ data: shortData })
-        console.log(`[PROCESS] Database record created for segment ${i + 1}`)
+        // Create short record
+        await prisma.videoShort.create({
+          data: {
+            videoId: video.id,
+            title: `${video.title} - Part ${i + 1}`,
+            url,
+            durationInSeconds: segment.duration,
+            startTime: segment.start,
+            endTime: segment.start + segment.duration,
+            userId: video.userId,
+            filter: settings.enableFilters ? settings.selectedFilter : null
+          }
+        })
 
         successfulSegments++
+        console.log(`[PROCESS] Short record created for segment ${i + 1}`)
 
-        // Clean up temporary output file
+        // Clean up segment file
         await unlink(outputPath)
       } catch (error) {
-        console.error(`[SEGMENT_ERROR] Failed to process segment ${i + 1}:`, error)
+        console.error(`[PROCESS] Failed to process segment ${i + 1}:`, error)
       }
     }
 
-    // Update final status
-    const finalStatus = successfulSegments > 0 ? 'COMPLETED' : 'FAILED'
-    const videoData = {
-      status: finalStatus,
-      durationInSeconds: metadata.duration
+    // Generate and upload thumbnail
+    try {
+      const thumbnailBuffer = await generateThumbnail(inputPath)
+      const thumbnailKey = generateS3Key(video.userId, `thumbnail-${videoId}.jpg`)
+      const thumbnailUrl = await uploadToS3(thumbnailBuffer, thumbnailKey, 'image/jpeg')
+      
+      await prisma.video.update({
+        where: { id: videoId },
+        data: {
+          thumbnailUrl,
+          status: successfulSegments > 0 ? 'COMPLETED' : 'FAILED'
+        }
+      })
+      console.log('[PROCESS] Thumbnail uploaded and video updated')
+    } catch (error) {
+      console.error('[PROCESS] Failed to generate/upload thumbnail:', error)
+      await prisma.video.update({
+        where: { id: videoId },
+        data: {
+          status: successfulSegments > 0 ? 'COMPLETED' : 'FAILED'
+        }
+      })
     }
-
-    await prisma.video.update({
-      where: { id: videoId },
-      data: videoData
-    })
-
-    return { success: finalStatus === 'COMPLETED', segments: successfulSegments }
   } catch (error) {
-    console.error('[PROCESS_ERROR] Video processing failed:', error)
+    console.error('[PROCESS] Processing failed:', error)
     await prisma.video.update({
       where: { id: videoId },
       data: { status: 'FAILED' }
     })
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
   } finally {
-    // Clean up temporary files
+    // Clean up input file
     if (inputPath) {
       try {
         await unlink(inputPath)
-        console.log('[CLEANUP] Removed temporary input file:', inputPath)
-      } catch (cleanupError) {
-        console.error('[CLEANUP_ERROR] Failed to remove temporary file:', cleanupError)
+        console.log('[PROCESS] Cleaned up input file')
+      } catch (error) {
+        console.error('[PROCESS] Failed to clean up input file:', error)
       }
     }
   }

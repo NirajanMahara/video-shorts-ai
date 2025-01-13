@@ -1,18 +1,15 @@
 import ffmpeg from 'fluent-ffmpeg'
 import { join } from 'path'
 import os from 'os'
-import { uploadToS3, generateS3Key } from './storage'
-import { readFile } from 'fs/promises'
+import { readFile, unlink } from 'fs/promises'
 
 export async function generateThumbnail(
   inputPath: string,
-  userId: string,
   timestamp: number = 0
-): Promise<string> {
+): Promise<Buffer> {
   console.log('[THUMBNAIL] Generating thumbnail:', {
     inputPath,
-    timestamp,
-    userId
+    timestamp
   })
 
   const outputPath = join(os.tmpdir(), `thumbnail-${Date.now()}.jpg`)
@@ -47,36 +44,34 @@ export async function generateThumbnail(
 
     // Verify thumbnail was created
     try {
-      const stats = await readFile(outputPath)
-      console.log('[THUMBNAIL] File size:', stats.length, 'bytes')
-      if (stats.length === 0) {
+      const buffer = await readFile(outputPath)
+      console.log('[THUMBNAIL] File size:', buffer.length, 'bytes')
+      if (buffer.length === 0) {
         throw new Error('Generated thumbnail is empty')
       }
+      return buffer
     } catch (error) {
       throw new Error(`Failed to verify thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
-
-    // Upload thumbnail to S3
-    console.log('[THUMBNAIL] Uploading to S3')
-    const buffer = await readFile(outputPath)
-    const key = generateS3Key(userId, `thumbnails/${Date.now()}.jpg`)
-    const url = await uploadToS3(buffer, key, 'image/jpeg')
-    console.log('[THUMBNAIL] Upload successful:', url)
-
-    return url
   } catch (error) {
     console.error('[THUMBNAIL_ERROR] Failed to generate thumbnail:', error)
-    // Return a default thumbnail URL or throw error based on your requirements
     throw new Error(`Thumbnail generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  } finally {
+    // Clean up temporary file
+    try {
+      await unlink(outputPath)
+      console.log('[THUMBNAIL] Cleaned up temporary file')
+    } catch (error) {
+      console.error('[THUMBNAIL] Failed to clean up temporary file:', error)
+    }
   }
 }
 
 export async function generateThumbnailAtIntervals(
   inputPath: string,
-  userId: string,
   duration: number,
   count: number = 3
-): Promise<string[]> {
+): Promise<Buffer[]> {
   console.log('[THUMBNAILS] Generating thumbnails at intervals:', {
     inputPath,
     duration,
@@ -98,24 +93,24 @@ export async function generateThumbnailAtIntervals(
     console.log('[THUMBNAILS] Using timestamps:', timestamps)
 
     // Generate thumbnails sequentially to avoid overwhelming the system
-    const thumbnailUrls: string[] = []
+    const thumbnails: Buffer[] = []
     for (let i = 0; i < timestamps.length; i++) {
       try {
-        const url = await generateThumbnail(inputPath, userId, timestamps[i])
-        thumbnailUrls.push(url)
-        console.log(`[THUMBNAILS] Generated thumbnail ${i + 1}/${timestamps.length}:`, url)
+        const buffer = await generateThumbnail(inputPath, timestamps[i])
+        thumbnails.push(buffer)
+        console.log(`[THUMBNAILS] Generated thumbnail ${i + 1}/${timestamps.length}`)
       } catch (error) {
         console.error(`[THUMBNAILS_ERROR] Failed to generate thumbnail ${i + 1}:`, error)
         // Continue with remaining thumbnails
       }
     }
 
-    if (thumbnailUrls.length === 0) {
+    if (thumbnails.length === 0) {
       throw new Error('Failed to generate any thumbnails')
     }
 
-    console.log('[THUMBNAILS] Successfully generated thumbnails:', thumbnailUrls)
-    return thumbnailUrls
+    console.log('[THUMBNAILS] Successfully generated thumbnails')
+    return thumbnails
   } catch (error) {
     console.error('[THUMBNAILS_ERROR] Failed to generate thumbnails:', error)
     throw error

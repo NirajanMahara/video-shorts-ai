@@ -1,98 +1,33 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { auth } from '@clerk/nextjs'
-import { redirect } from 'next/navigation'
-import { Video, Clock, CheckCircle, XCircle, Play, Trash2 } from 'lucide-react'
-import Image from 'next/image'
-import VideoModal from '@/components/VideoModal'
-import ConfirmDialog from '@/components/ConfirmDialog'
-
-interface VideoShort {
-  id: string
-  title: string
-  url: string
-  thumbnailUrl: string | null
-  durationInSeconds: number
-}
-
-interface VideoType {
-  id: string
-  title: string
-  status: string
-  url: string | null
-  createdAt: string
-  updatedAt: string
-  shorts: VideoShort[]
-}
-
-function formatDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = Math.floor(seconds % 60)
-  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-}
+import { Video } from '@/types'
+import Link from 'next/link'
+import { formatDistanceToNow } from 'date-fns'
 
 export default function DashboardPage() {
-  const [videos, setVideos] = useState<VideoType[]>([])
+  const [videos, setVideos] = useState<Video[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedShort, setSelectedShort] = useState<VideoShort | null>(null)
-  const [videoToDelete, setVideoToDelete] = useState<VideoType | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
   const fetchVideos = async () => {
     try {
       const response = await fetch('/api/videos')
-      if (!response.ok) throw new Error('Failed to fetch videos')
+        if (!response.ok) {
+          throw new Error('Failed to fetch videos')
+        }
       const data = await response.json()
-      setVideos(data.videos)
-    } catch (error) {
-      console.error('Error fetching videos:', error)
+        setVideos(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch videos')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
     fetchVideos()
-    // Refresh every 5 seconds if there are processing videos
-    const interval = setInterval(() => {
-      if (videos.some(video => video.status === 'PROCESSING')) {
-        fetchVideos()
-      }
-    }, 5000)
-
-    return () => clearInterval(interval)
-  }, [videos])
-
-  const handleDeleteVideo = async (video: VideoType) => {
-    setIsDeleting(true)
-    try {
-      const response = await fetch(`/api/videos/${video.id}`, {
-        method: 'DELETE',
-      })
-      if (!response.ok) throw new Error('Failed to delete video')
-      
-      // Remove the video from the local state
-      setVideos(videos.filter(v => v.id !== video.id))
-    } catch (error) {
-      console.error('Error deleting video:', error)
-      // You could add error toast here
-    } finally {
-      setIsDeleting(false)
-      setVideoToDelete(null)
-    }
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'COMPLETED':
-        return <CheckCircle className="h-5 w-5 text-green-500" />
-      case 'FAILED':
-        return <XCircle className="h-5 w-5 text-red-500" />
-      default:
-        return <Clock className="h-5 w-5 text-yellow-500 animate-pulse" />
-    }
-  }
+  }, [])
 
   if (loading) {
     return (
@@ -104,8 +39,17 @@ export default function DashboardPage() {
     )
   }
 
+  if (error) {
   return (
-    <>
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center text-red-700">
+          {error}
+        </div>
+      </div>
+    )
+  }
+
+  return (
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Your Videos</h1>
@@ -119,123 +63,92 @@ export default function DashboardPage() {
         </div>
         
         {videos.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-100">
-            <Video className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No videos yet</h3>
-            <p className="text-gray-500 mb-4">Upload your first video to get started</p>
-            <a
+        <div className="text-center py-12 bg-gray-50 rounded-lg">
+          <h3 className="text-lg font-medium text-gray-900">No videos yet</h3>
+          <p className="mt-1 text-sm text-gray-500">Upload your first video to get started</p>
+          <Link 
               href="/"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
             >
-              Upload a Video
-            </a>
+            Upload Video
+          </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {videos.map((video) => (
-              <div
-                key={video.id}
-                className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 hover:shadow-md transition-shadow duration-200"
-              >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <h3 className="font-medium text-gray-900 line-clamp-1" title={video.title}>
-                      {video.title}
-                    </h3>
-                    <div className="flex items-center space-x-2">
-                      {getStatusIcon(video.status)}
-                      <button
-                        onClick={() => setVideoToDelete(video)}
-                        disabled={isDeleting}
-                        className="text-gray-400 hover:text-red-500 transition-colors"
-                        title="Delete video"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize
-                        ${
-                          video.status === 'COMPLETED'
-                            ? 'bg-green-100 text-green-800'
-                            : video.status === 'FAILED'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}
+            <div key={video.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="relative h-48 bg-gray-100">
+                {video.thumbnailUrl ? (
+                  <img
+                    src={video.thumbnailUrl}
+                    alt={video.title || 'Video thumbnail'}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement
+                      target.style.display = 'none'
+                      // Show fallback icon
+                      const parent = target.parentElement
+                      if (parent) {
+                        parent.classList.add('flex', 'items-center', 'justify-center')
+                        const svg = document.createElement('svg')
+                        svg.setAttribute('class', 'w-12 h-12 text-gray-400')
+                        svg.setAttribute('fill', 'none')
+                        svg.setAttribute('stroke', 'currentColor')
+                        svg.setAttribute('viewBox', '0 0 24 24')
+                        svg.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />`
+                        parent.appendChild(svg)
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                    <svg 
+                      className="w-12 h-12 text-gray-400"
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
                     >
-                      {video.status.toLowerCase()}
-                    </span>
-                    <time className="text-gray-500" dateTime={video.createdAt}>
-                      {new Date(video.createdAt).toLocaleDateString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </time>
-                  </div>
-                </div>
-                {video.status === 'COMPLETED' && video.shorts.length > 0 && (
-                  <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
-                    <p className="text-sm font-medium text-gray-900 mb-4">Generated Shorts:</p>
-                    <div className="grid grid-cols-1 gap-4">
-                      {video.shorts.map((short, index) => (
-                        <div
-                          key={short.id}
-                          className="group relative cursor-pointer"
-                          onClick={() => setSelectedShort(short)}
-                        >
-                          <div className="aspect-video w-full relative rounded-lg overflow-hidden bg-gray-100">
-                            {short.thumbnailUrl ? (
-                              <Image
-                                src={short.thumbnailUrl}
-                                alt={`Thumbnail for ${short.title}`}
-                                fill
-                                className="object-cover"
-                              />
-                            ) : (
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                <Video className="h-8 w-8 text-gray-400" />
-                              </div>
-                            )}
-                            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center">
-                              <Play className="h-12 w-12 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </div>
-                            <div className="absolute bottom-2 right-2 px-2 py-1 bg-black bg-opacity-75 rounded text-white text-xs">
-                              {formatDuration(short.durationInSeconds)}
-                            </div>
-                          </div>
-                          <div className="mt-2">
-                            <span className="text-sm text-gray-600">Part {index + 1}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" 
+                      />
+                    </svg>
                   </div>
                 )}
+              </div>
+              <div className="p-4">
+                <h3 className="font-semibold text-lg mb-2">{video.title || 'Untitled Video'}</h3>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">
+                    {formatDistanceToNow(new Date(video.createdAt), { addSuffix: true })}
+                  </span>
+                  <span className={`text-sm px-2 py-1 rounded-full ${
+                          video.status === 'COMPLETED'
+                            ? 'bg-green-100 text-green-800'
+                      : video.status === 'PROCESSING'
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                      {video.status.toLowerCase()}
+                    </span>
+                </div>
+                {video.status === 'COMPLETED' && video.url && (
+                  <a
+                    href={video.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 block text-center bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700 transition-colors"
+                  >
+                    Watch Video
+                  </a>
+                )}
+              </div>
               </div>
             ))}
           </div>
         )}
       </div>
-
-      <VideoModal
-        isOpen={!!selectedShort}
-        onClose={() => setSelectedShort(null)}
-        videoUrl={selectedShort?.url || ''}
-        title={selectedShort?.title || ''}
-      />
-
-      <ConfirmDialog
-        isOpen={!!videoToDelete}
-        onClose={() => setVideoToDelete(null)}
-        onConfirm={() => videoToDelete && handleDeleteVideo(videoToDelete)}
-        title="Delete Video"
-        message={`Are you sure you want to delete "${videoToDelete?.title}"? This will also delete all generated shorts and cannot be undone.`}
-        confirmText={isDeleting ? 'Deleting...' : 'Delete'}
-        cancelText="Cancel"
-      />
-    </>
   )
 } 

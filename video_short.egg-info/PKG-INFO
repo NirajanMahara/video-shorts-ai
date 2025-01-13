@@ -1,3 +1,41 @@
+Metadata-Version: 2.1
+Name: video-short
+Version: 0.1.0
+Summary: AI-powered video processing for generating engaging short-form content
+Home-page: https://github.com/yourusername/video-short
+Author: Your Name
+Author-email: your.email@example.com
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: opencv-python>=4.8.1.78
+Requires-Dist: moviepy>=1.0.3
+Requires-Dist: numpy>=1.26.2
+Requires-Dist: face-recognition>=1.3.0
+Requires-Dist: pydub>=0.25.1
+Requires-Dist: scipy>=1.11.4
+Requires-Dist: scikit-learn>=1.3.2
+Requires-Dist: torch>=2.1.2
+Requires-Dist: transformers>=4.36.2
+Requires-Dist: fastapi>=0.108.0
+Requires-Dist: python-multipart>=0.0.6
+Requires-Dist: uvicorn>=0.25.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: boto3>=1.34.11
+Requires-Dist: whisper>=1.1.10
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4.3; extra == "dev"
+Requires-Dist: black>=23.12.1; extra == "dev"
+Requires-Dist: isort>=5.13.2; extra == "dev"
+Requires-Dist: mypy>=1.8.0; extra == "dev"
+
 # Video Shorts Generator
 
 An innovative AI-powered video processing application that automatically generates engaging short-form videos from long-form content. Perfect for content creators, podcasters, and marketers looking to repurpose their content for social media.
@@ -80,9 +118,9 @@ An innovative AI-powered video processing application that automatically generat
 
 Start the development server:
 
-   ```bash
-   npm run dev
-   ```
+```bash
+npm run dev
+```
 
 This will start both the Next.js frontend and Python backend concurrently.
 - Frontend: http://localhost:3000
