@@ -42,11 +42,11 @@ venv/
 
 # Temporary files
 *.tmp
-temp/
+# temp/
 tmp/
 
 # Video processing
-*.mp4
+# *.mp4
 *.avi
 *.mov
 *.mkv
